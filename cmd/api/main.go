@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 
 	"goevent/internal/handler"
 	"goevent/internal/middleware"
@@ -14,54 +16,53 @@ import (
 )
 
 func main() {
-	// Подключение к SQLite (файловая база, не требует установки PostgreSQL)
-	db, err := sqlx.Connect("sqlite3", "./goevent.db")
+	// Database configuration from environment variables
+	dbHost := getEnv("DB_HOST", "localhost")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbName := getEnv("DB_NAME", "goevent")
+	dbUser := getEnv("DB_USER", "goevent_user")
+	dbPassword := getEnv("DB_PASSWORD", "goevent_password")
+	jwtSecret := getEnv("JWT_SECRET", "your-secret-key")
+
+	// Build PostgreSQL connection string
+	dbURL := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPassword, dbName)
+
+	// Connect to PostgreSQL
+	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Database connection failed:", err)
 	}
 	defer db.Close()
 
-	// Создаём таблицы (простая версия)
-	db.MustExec(`
-	    CREATE TABLE IF NOT EXISTS users (
-	        id INTEGER PRIMARY KEY AUTOINCREMENT,
-	        username TEXT UNIQUE NOT NULL,
-	        email TEXT UNIQUE NOT NULL,
-	        password TEXT NOT NULL,
-	        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	    )
-	`)
+	// Test database connection
+	if err := db.Ping(); err != nil {
+		log.Fatal("Database ping failed:", err)
+	}
 
-	db.MustExec(`
-	    CREATE TABLE IF NOT EXISTS events (
-	        id INTEGER PRIMARY KEY AUTOINCREMENT,
-	        title TEXT NOT NULL,
-	        description TEXT,
-	        date DATETIME NOT NULL,
-	        location TEXT NOT NULL,
-	        creator_id INTEGER NOT NULL,
-	        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	        FOREIGN KEY (creator_id) REFERENCES users(id)
-	    )
-	`)
+	log.Println("✅ Database connected successfully")
 
-	log.Println("✅ Database connected and initialized")
-
-	// Инициализация зависимостей
+	// Initialize dependencies
 	userRepo := repository.NewUserRepository(db)
-	eventRepo := repository.NewEventRepository(db)
-
-	authService := service.NewAuthService(userRepo, "your-secret-key")
-	eventService := service.NewEventService(eventRepo)
-
+	authService := service.NewAuthService(userRepo, jwtSecret)
 	authHandler := handler.NewAuthHandler(authService)
-	eventHandler := handler.NewEventHandler(eventService)
 
+	// Setup Gin router
 	r := gin.Default()
 
-	// Public routes - аутентификация
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		if err := db.Ping(); err != nil {
+			c.JSON(500, gin.H{"status": "database connection failed"})
+			return
+		}
+		c.JSON(200, gin.H{
+			"status":   "healthy",
+			"database": "connected",
+		})
+	})
+
+	// Public routes - authentication
 	auth := r.Group("/auth")
 	{
 		auth.POST("/register", authHandler.Register)
@@ -73,22 +74,9 @@ func main() {
 	api.Use(middleware.AuthMiddleware(authService))
 	{
 		api.GET("/profile", authHandler.GetProfile)
-
-		// Event routes
-		events := api.Group("/events")
-		{
-			events.POST("", eventHandler.CreateEvent)
-			events.GET("", eventHandler.GetMyEvents)
-			events.GET("/:id", eventHandler.GetEvent)
-			events.PUT("/:id", eventHandler.UpdateEvent)
-			events.DELETE("/:id", eventHandler.DeleteEvent)
-		}
 	}
 
-	// Public event routes (read-only)
-	r.GET("/events", eventHandler.GetAllEvents)
-	r.GET("/events/:id", eventHandler.GetEvent)
-
+	// Legacy ping endpoint
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
@@ -96,6 +84,20 @@ func main() {
 		})
 	})
 
-	log.Println("🚀 Server starting on :4000")
-	r.Run(":4000")
+	// Get port from environment
+	port := getEnv("PORT", "8080")
+	addr := ":" + port
+
+	log.Printf("🚀 Server starting on %s", addr)
+	if err := r.Run(addr); err != nil {
+		log.Fatal("Server failed to start:", err)
+	}
+}
+
+// getEnv gets environment variable or returns default value
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
