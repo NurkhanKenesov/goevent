@@ -1,0 +1,101 @@
+package main
+
+import (
+	"log"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
+
+	"goevent/internal/handler"
+	"goevent/internal/middleware"
+	"goevent/internal/repository"
+	"goevent/internal/service"
+)
+
+func main() {
+	// Подключение к SQLite (файловая база, не требует установки PostgreSQL)
+	db, err := sqlx.Connect("sqlite3", "./goevent.db")
+	if err != nil {
+		log.Fatal("Database connection failed:", err)
+	}
+	defer db.Close()
+
+	// Создаём таблицы (простая версия)
+	db.MustExec(`
+	    CREATE TABLE IF NOT EXISTS users (
+	        id INTEGER PRIMARY KEY AUTOINCREMENT,
+	        username TEXT UNIQUE NOT NULL,
+	        email TEXT UNIQUE NOT NULL,
+	        password TEXT NOT NULL,
+	        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	    )
+	`)
+
+	db.MustExec(`
+	    CREATE TABLE IF NOT EXISTS events (
+	        id INTEGER PRIMARY KEY AUTOINCREMENT,
+	        title TEXT NOT NULL,
+	        description TEXT,
+	        date DATETIME NOT NULL,
+	        location TEXT NOT NULL,
+	        creator_id INTEGER NOT NULL,
+	        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	        FOREIGN KEY (creator_id) REFERENCES users(id)
+	    )
+	`)
+
+	log.Println("✅ Database connected and initialized")
+
+	// Инициализация зависимостей
+	userRepo := repository.NewUserRepository(db)
+	eventRepo := repository.NewEventRepository(db)
+
+	authService := service.NewAuthService(userRepo, "your-secret-key")
+	eventService := service.NewEventService(eventRepo)
+
+	authHandler := handler.NewAuthHandler(authService)
+	eventHandler := handler.NewEventHandler(eventService)
+
+	r := gin.Default()
+
+	// Public routes - аутентификация
+	auth := r.Group("/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+	}
+
+	// Protected routes
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware(authService))
+	{
+		api.GET("/profile", authHandler.GetProfile)
+
+		// Event routes
+		events := api.Group("/events")
+		{
+			events.POST("", eventHandler.CreateEvent)
+			events.GET("", eventHandler.GetMyEvents)
+			events.GET("/:id", eventHandler.GetEvent)
+			events.PUT("/:id", eventHandler.UpdateEvent)
+			events.DELETE("/:id", eventHandler.DeleteEvent)
+		}
+	}
+
+	// Public event routes (read-only)
+	r.GET("/events", eventHandler.GetAllEvents)
+	r.GET("/events/:id", eventHandler.GetEvent)
+
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "pong",
+			"status":  "success",
+		})
+	})
+
+	log.Println("🚀 Server starting on :4000")
+	r.Run(":4000")
+}
