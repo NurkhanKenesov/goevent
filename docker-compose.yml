@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+<<<<<<< HEAD
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
@@ -9,11 +10,20 @@ services:
       POSTGRES_DB: goevent
       POSTGRES_USER: goevent_user
       POSTGRES_PASSWORD: goevent_password
+=======
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: goevent
+>>>>>>> feature/auth
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
+<<<<<<< HEAD
     networks:
       - goevent_network
 
@@ -47,3 +57,8 @@ volumes:
 networks:
   goevent_network:
     driver: bridge
+=======
+
+volumes:
+  postgres_data:
+>>>>>>> feature/auth

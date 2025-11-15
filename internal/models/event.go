@@ -13,7 +13,6 @@ type Event struct {
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
 }
 
-// Request structures
 type CreateEventRequest struct {
 	Title       string    `json:"title" binding:"required,min=1,max=255"`
 	Description string    `json:"description" binding:"max=1000"`
@@ -28,7 +27,6 @@ type UpdateEventRequest struct {
 	Location    *string    `json:"location,omitempty"`
 }
 
-// Response structures
 type EventResponse struct {
 	Event *Event `json:"event"`
 	User  *User  `json:"creator,omitempty"`

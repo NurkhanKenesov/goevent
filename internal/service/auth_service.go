@@ -24,7 +24,6 @@ func NewAuthService(userRepo *repository.UserRepository, jwtSecret string) *Auth
 }
 
 func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthResponse, error) {
-	// Проверяем, существует ли email
 	exists, err := s.userRepo.EmailExists(req.Email)
 	if err != nil {
 		return nil, err
@@ -33,13 +32,11 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthRespons
 		return nil, errors.New("email already registered")
 	}
 
-	// Хешируем пароль
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 
-	// Создаём пользователя
 	user := &models.User{
 		Username:  req.Username,
 		Email:     req.Email,
@@ -48,13 +45,11 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthRespons
 		UpdatedAt: time.Now(),
 	}
 
-	// Сохраняем в БД
 	err = s.userRepo.CreateUser(user)
 	if err != nil {
 		return nil, err
 	}
 
-	// Генерируем JWT токен
 	token, err := s.generateToken(user)
 	if err != nil {
 		return nil, err
@@ -67,19 +62,16 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthRespons
 }
 
 func (s *AuthService) Login(req *models.LoginRequest) (*models.AuthResponse, error) {
-	// Ищем пользователя по email
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Проверяем пароль
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
 	if err != nil {
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Генерируем JWT токен
 	token, err := s.generateToken(user)
 	if err != nil {
 		return nil, err
