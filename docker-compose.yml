@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: goevent_postgres
+    environment:
+      POSTGRES_DB: goevent
+      POSTGRES_USER: goevent_user
+      POSTGRES_PASSWORD: goevent_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - goevent_network
+
+  # Go Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: goevent_app
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=goevent
+      - DB_USER=goevent_user
+      - DB_PASSWORD=goevent_password
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    depends_on:
+      - postgres
+    networks:
+      - goevent_network
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: go run cmd/api/main.go
+
+volumes:
+  postgres_data:
+
+networks:
+  goevent_network:
+    driver: bridge
