@@ -1,1 +1,0 @@
-# GoEvent – Event Planning Platform
