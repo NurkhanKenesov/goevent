@@ -22,7 +22,7 @@ func Load() *Config {
 	cfg := &Config{
 		DBHost:    getEnv("DB_HOST", "localhost"),
 		DBPort:    getEnv("DB_PORT", "5432"),
-		DBUser:    getEnv("DB_USER", "postgres]"),
+		DBUser:    getEnv("DB_USER", "postgres"),
 		DBPass:    getEnv("DB_PASSWORD", "postgres"),
 		DBName:    getEnv("DB_NAME", "goevent"),
 		JWTSecret: getEnv("JWT_SECRET", "secret_key"),

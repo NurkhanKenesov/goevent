@@ -1,48 +1,44 @@
 package db
 
 import (
-	"context"
 	"fmt"
 	"goevent/internal/config"
 	"log"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 )
 
-var Pool *pgxpool.Pool
+var DB *sqlx.DB
 
-func Connect(cfg *config.Config) error {
+func Connect(cfg *config.Config) (*sqlx.DB, error) {
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		cfg.DBUser, cfg.DBPass, cfg.DBHost, cfg.DBPort, cfg.DBName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.New(ctx, dbURL)
+	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
-		return fmt.Errorf("pgxpool.New: %w", err)
+		return nil, fmt.Errorf("sqlx.Connect: %w", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return fmt.Errorf("ping db: %w", err)
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
-	Pool = pool
+	DB = db
 	log.Println("Connected to Postgres")
 
 	if err := applyMigrations(dbURL); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	return nil
+	return db, nil
 }
 
 func applyMigrations(dbURL string) error {
-	m, err := migrate.New("file://migrations", dbURL)
+	m, err := migrate.New("file://migration", dbURL)
 	if err != nil {
 		return err
 	}
