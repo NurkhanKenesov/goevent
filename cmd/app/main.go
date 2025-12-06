@@ -1,34 +1,46 @@
 package main
 
 import (
-	"fmt"
-	"goevent/internal/config"
-	"goevent/internal/db"
-	"goevent/internal/handler"
 	"log"
 
 	"github.com/gin-gonic/gin"
+
+	"goevent/internal/config"
+	"goevent/internal/db"
+	"goevent/internal/event"
+	"goevent/internal/handler/auth"
+	eventhandler "goevent/internal/handler/event"
 )
 
 func main() {
+	// Загружаем ENV
 	cfg := config.Load()
 
-	if err := db.Connect(cfg); err != nil {
-		log.Fatalf("db connect error: %v", err)
+	// Подключаемся к базе
+	database, err := db.Connect(cfg)
+	if err != nil {
+		log.Fatal("DB connection error: ", err)
 	}
-	fmt.Println("DB connected")
 
+	// Инициализация сервисов и хендлеров
+	eventRepo := event.NewRepository(database)
+	eventService := event.NewService(eventRepo)
+	eventHandler := eventhandler.NewHandler(eventService)
+
+	// Router
 	r := gin.Default()
 
-	r.GET("/ping", handler.Ping)
-	r.POST("/register", handler.RegisterUser)
-	r.POST("/login", handler.Login)
+	// Auth
+	r.POST("/register", auth.RegisterUser)
+	r.POST("/login", auth.Login)
 
-	auth := r.Group("/")
-	auth.Use(handler.AuthMiddleware(cfg.JWTSecret))
-	auth.GET("/profile", handler.Profile)
+	// Events
+	r.POST("/events", eventHandler.CreateEvent)
+	r.GET("/events", eventHandler.ListEvents)
+	r.GET("/events/:id", eventHandler.GetEvent)
+	r.PUT("/events/:id", eventHandler.UpdateEvent)
+	r.DELETE("/events/:id", eventHandler.DeleteEvent)
 
-	if err := r.Run(":3000"); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
+	// Запуск сервера
+	r.Run(":3000")
 }
