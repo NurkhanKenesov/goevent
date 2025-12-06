@@ -1,4 +1,5 @@
 -- +migrate Up
+DROP TYPE IF EXISTS invitation_status;
 CREATE TYPE invitation_status AS ENUM ('Pending', 'Accepted', 'Declined');
 
 CREATE TABLE invitations (
