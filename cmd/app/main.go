@@ -10,6 +10,7 @@ import (
 	"goevent/internal/event"
 	"goevent/internal/handler/auth"
 	eventhandler "goevent/internal/handler/event"
+	"goevent/internal/invite"
 )
 
 func main() {
@@ -22,10 +23,16 @@ func main() {
 		log.Fatal("DB connection error: ", err)
 	}
 
+	jwtSecret := "mysecretkey"
+
 	// Инициализация сервисов и хендлеров
 	eventRepo := event.NewRepository(database)
 	eventService := event.NewService(eventRepo)
 	eventHandler := eventhandler.NewHandler(eventService)
+
+	inviteRepo := invite.NewRepository(database)
+	inviteService := invite.NewService(inviteRepo, eventRepo)
+	inviteHandler := invite.NewHandler(inviteService)
 
 	// Router
 	r := gin.Default()
@@ -40,6 +47,12 @@ func main() {
 	r.GET("/events/:id", eventHandler.GetEvent)
 	r.PUT("/events/:id", eventHandler.UpdateEvent)
 	r.DELETE("/events/:id", eventHandler.DeleteEvent)
+
+	// Invitations
+	authMiddleware := auth.AuthMiddleware(jwtSecret)
+	r.POST("/events/:id/invite", authMiddleware, inviteHandler.InviteUser)
+	r.POST("/invitations/:id/respond", authMiddleware, inviteHandler.RespondInvitation)
+	r.GET("/my-events", authMiddleware, inviteHandler.GetMyEvents)
 
 	// Запуск сервера
 	r.Run(":3000")
