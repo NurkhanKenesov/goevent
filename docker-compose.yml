@@ -1,37 +1,44 @@
-db:
-  image: postgres:16
-  container_name: goevent-db
-  environment:
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: postgres 
-    POSTGRES_DB: goevent
-  ports:
-    - "5432:5432"
-  volumes:
-    - db-data:/var/lib/postgresql/data
+volumes:
+  db-data:
 
-app:
-  build: .
-  container_name: goevent-app
-  ports:
-    - "3000:3000"
-  depends_on:
-    - db
-  environment:
-    DB_HOST: db
-    DB_PORT: 5432
-    DB_USER: postgres
-    DB_PASSWORD: postgres     
-    DB_NAME: goevent
-    JWT_SECRET: mysecretkey
+services:
+  db:
+    image: postgres:16
+    container_name: goevent-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: goevent
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
 
-pgadmin:
-  image: dpage/pgadmin4:7
-  container_name: goevent-pgadmin
-  environment:
-    PGADMIN_DEFAULT_EMAIL: admin@admin.com
-    PGADMIN_DEFAULT_PASSWORD: admin
-  ports:
-    - "8080:80"
-  depends_on:
-    - db
+  app:
+    build: .
+    container_name: goevent-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: goevent
+      JWT_SECRET: mysecretkey
+    command: go run cmd/app/main.go
+    volumes:
+      - .:/app
+
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: goevent-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
