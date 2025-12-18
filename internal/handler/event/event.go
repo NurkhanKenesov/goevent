@@ -116,7 +116,26 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	events, err := h.service.ListEvents(c.Request.Context(), 10, 0)
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+		return
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
+		return
+	}
+
+	events, err := h.service.ListEvents(
+		c.Request.Context(),
+		limit,
+		offset,
+	)
 	if err != nil {
 		handleError(c, err)
 		return
