@@ -43,7 +43,7 @@ func RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user.ID = id
+	user.ID = int64(id)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "user registered",
