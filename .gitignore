@@ -1,0 +1,13 @@
+# env
+.env
+
+# editor
+.vscode/
+.idea/
+
+# images
+*.jpg
+*.png
+
+# logs
+*.log
