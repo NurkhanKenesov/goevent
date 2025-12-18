@@ -1,9 +1,11 @@
 package eventhandler
 
 import (
-	"goevent/internal/event"
+	"errors"
 	"net/http"
 	"strconv"
+
+	"goevent/internal/event"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,56 +25,113 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 		return
 	}
 
-	e.AuthorID = 1
-
-	if err := h.service.CreateEvent(c.Request.Context(), &e); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	emailRaw, ok := c.Get("email")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	email := emailRaw.(string)
+
+	if err := h.service.CreateEvent(c.Request.Context(), &e, email); err != nil {
+		handleError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusCreated, e)
 }
 
 func (h *Handler) GetEvent(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	e, err := h.service.GetEvent(c.Request.Context(), id)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+
+	e, err := h.service.GetEvent(c.Request.Context(), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusOK, e)
 }
 
 func (h *Handler) UpdateEvent(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
 	var e event.Event
 	if err := c.ShouldBindJSON(&e); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	e.ID = int64(id)
-	e.AuthorID = 1
 
-	if err := h.service.UpdateEvent(c.Request.Context(), &e); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	emailRaw, ok := c.Get("email")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	email := emailRaw.(string)
+
+	if err := h.service.UpdateEvent(
+		c.Request.Context(),
+		id,
+		&e,
+		email,
+	); err != nil {
+		handleError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusOK, e)
 }
 
 func (h *Handler) DeleteEvent(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.DeleteEvent(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+
+	emailRaw, ok := c.Get("email")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	email := emailRaw.(string)
+
+	if err := h.service.DeleteEvent(
+		c.Request.Context(),
+		id,
+		email,
+	); err != nil {
+		handleError(c, err)
+		return
+	}
+
 	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	events, err := h.service.ListEvents(c.Request.Context(), 10, 0) // лимит и оффсет пока фиксированные
+	events, err := h.service.ListEvents(c.Request.Context(), 10, 0)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		handleError(c, err)
 		return
 	}
+
 	c.JSON(http.StatusOK, events)
+}
+
+func handleError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, event.ErrNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	case errors.Is(err, event.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
 }

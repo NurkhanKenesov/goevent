@@ -11,13 +11,12 @@ import (
 	"goevent/internal/handler/auth"
 	eventhandler "goevent/internal/handler/event"
 	"goevent/internal/invite"
+	"goevent/internal/repository"
 )
 
 func main() {
-	// Загружаем ENV
 	cfg := config.Load()
 
-	// Подключаемся к базе
 	database, err := db.Connect(cfg)
 	if err != nil {
 		log.Fatal("DB connection error: ", err)
@@ -25,35 +24,39 @@ func main() {
 
 	jwtSecret := "mysecretkey"
 
-	// Инициализация сервисов и хендлеров
 	eventRepo := event.NewRepository(database)
-	eventService := event.NewService(eventRepo)
+	userRepo := repository.NewUserRepo()
+
+	eventService := event.NewService(eventRepo, userRepo)
 	eventHandler := eventhandler.NewHandler(eventService)
 
 	inviteRepo := invite.NewRepository(database)
 	inviteService := invite.NewService(inviteRepo, eventRepo)
 	inviteHandler := invite.NewHandler(inviteService)
 
-	// Router
 	r := gin.Default()
 
-	// Auth
 	r.POST("/register", auth.RegisterUser)
 	r.POST("/login", auth.Login)
 
-	// Events
-	r.POST("/events", eventHandler.CreateEvent)
-	r.GET("/events", eventHandler.ListEvents)
-	r.GET("/events/:id", eventHandler.GetEvent)
-	r.PUT("/events/:id", eventHandler.UpdateEvent)
-	r.DELETE("/events/:id", eventHandler.DeleteEvent)
-
-	// Invitations
 	authMiddleware := auth.AuthMiddleware(jwtSecret)
+
+	events := r.Group("/events")
+	{
+		events.GET("", eventHandler.ListEvents)
+		events.GET("/:id", eventHandler.GetEvent)
+
+		events.Use(authMiddleware)
+		{
+			events.POST("", eventHandler.CreateEvent)
+			events.PUT("/:id", eventHandler.UpdateEvent)
+			events.DELETE("/:id", eventHandler.DeleteEvent)
+		}
+	}
+
 	r.POST("/events/:id/invite", authMiddleware, inviteHandler.InviteUser)
 	r.POST("/invitations/:id/respond", authMiddleware, inviteHandler.RespondInvitation)
 	r.GET("/my-events", authMiddleware, inviteHandler.GetMyEvents)
 
-	// Запуск сервера
 	r.Run(":3000")
 }

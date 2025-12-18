@@ -3,62 +3,100 @@ package event
 import (
 	"context"
 	"errors"
-	"strings"
-	"time"
+
+	"goevent/internal/models"
 )
 
+var (
+	ErrNotFound  = errors.New("not found")
+	ErrForbidden = errors.New("forbidden")
+)
+
+type UserRepository interface {
+	GetByEmail(ctx context.Context, email string) (*models.User, error)
+}
+
 type Service struct {
-	repo *Repository
+	eventRepo *Repository
+	userRepo  UserRepository
 }
 
-func NewService(r *Repository) *Service {
-	return &Service{repo: r}
+func NewService(eventRepo *Repository, userRepo UserRepository) *Service {
+	return &Service{
+		eventRepo: eventRepo,
+		userRepo:  userRepo,
+	}
 }
 
-func (s *Service) CreateEvent(ctx context.Context, e *Event) error {
-	if strings.TrimSpace(e.Title) == "" {
-		return errors.New("title is required")
-	}
-	if strings.TrimSpace(e.Description) == "" {
-		return errors.New("description is required")
-	}
-	if e.EventDate.IsZero() || e.EventDate.Before(time.Now()) {
-		return errors.New("event_date must be in the future")
-	}
-	if e.LocationType != "online" && e.LocationType != "offline" {
-		return errors.New("location_type must be 'online' or 'offline'")
-	}
-	if strings.TrimSpace(e.LocationData) == "" {
-		return errors.New("location_data is required")
-	}
-	if e.AuthorID == 0 {
-		return errors.New("author_id is required")
+func (s *Service) CreateEvent(
+	ctx context.Context,
+	e *Event,
+	email string,
+) error {
+
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return ErrNotFound
 	}
 
-	e.Title = strings.TrimSpace(e.Title)
-	e.Description = strings.TrimSpace(e.Description)
-
-	return s.repo.CreateEvent(ctx, e)
+	e.AuthorID = user.ID
+	return s.eventRepo.CreateEvent(ctx, e)
 }
 
+func (s *Service) UpdateEvent(
+	ctx context.Context,
+	eventID int,
+	updated *Event,
+	email string,
+) error {
+
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	existing, err := s.eventRepo.GetEventByID(ctx, eventID)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	if existing.AuthorID != user.ID {
+		return ErrForbidden
+	}
+
+	updated.ID = int64(eventID)
+	updated.AuthorID = user.ID
+
+	return s.eventRepo.UpdateEvent(ctx, updated)
+}
+
+func (s *Service) DeleteEvent(
+	ctx context.Context,
+	eventID int,
+	email string,
+) error {
+
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	existing, err := s.eventRepo.GetEventByID(ctx, eventID)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	if existing.AuthorID != user.ID {
+		return ErrForbidden
+	}
+
+	return s.eventRepo.DeleteEvent(ctx, eventID)
+
+}
 func (s *Service) GetEvent(ctx context.Context, id int) (*Event, error) {
-	return s.repo.GetEventByID(ctx, id)
-}
-
-func (s *Service) UpdateEvent(ctx context.Context, e *Event) error {
-	if e.EventDate.Before(time.Now()) {
-		return errors.New("event date must be in the future")
-	}
-	if e.LocationType == "online" && e.LocationData == "" {
-		return errors.New("online events must have a link")
-	}
-	return s.repo.UpdateEvent(ctx, e)
-}
-
-func (s *Service) DeleteEvent(ctx context.Context, id int) error {
-	return s.repo.DeleteEvent(ctx, id)
+	return s.eventRepo.GetEventByID(ctx, id)
 }
 
 func (s *Service) ListEvents(ctx context.Context, limit, offset int) ([]*Event, error) {
-	return s.repo.ListEvents(ctx, limit, offset)
+	return s.eventRepo.ListEvents(ctx, limit, offset)
 }
