@@ -8,14 +8,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var authService = service.NewAuthService()
-
 type Handler struct {
-	service *Service
+	service     *Service
+	authService *service.AuthService
 }
 
-func NewHandler(s *Service) *Handler {
-	return &Handler{service: s}
+func NewHandler(s *Service, as *service.AuthService) *Handler {
+	return &Handler{
+		service:     s,
+		authService: as,
+	}
 }
 
 func (h *Handler) InviteUser(c *gin.Context) {
@@ -45,7 +47,7 @@ func (h *Handler) InviteUser(c *gin.Context) {
 		return
 	}
 
-	u, err := authService.GetByEmail(c.Request.Context(), email)
+	u, err := h.authService.GetByEmail(c.Request.Context(), email)
 	if err != nil || u == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 		return
@@ -87,7 +89,7 @@ func (h *Handler) RespondInvitation(c *gin.Context) {
 		return
 	}
 
-	u, err := authService.GetByEmail(c.Request.Context(), email)
+	u, err := h.authService.GetByEmail(c.Request.Context(), email)
 	if err != nil || u == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 		return
@@ -114,7 +116,7 @@ func (h *Handler) GetMyEvents(c *gin.Context) {
 		return
 	}
 
-	u, err := authService.GetByEmail(c.Request.Context(), email)
+	u, err := h.authService.GetByEmail(c.Request.Context(), email)
 	if err != nil || u == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 		return

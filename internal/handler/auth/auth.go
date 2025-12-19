@@ -3,7 +3,8 @@ package auth
 import (
 	"context"
 	"goevent/internal/models"
-	"goevent/internal/service"
+
+	// "goevent/internal/service"
 	"goevent/internal/utils"
 	"net/http"
 	"time"
@@ -11,11 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var authService = service.NewAuthService()
+type AuthService interface {
+	Register(ctx context.Context, u *models.User) (int64, error)
+	GetByEmail(ctx context.Context, email string) (*models.User, error)
+}
 
-var jwtSecret = "mysecretkey"
+type AuthHandler struct {
+	authService AuthService
+	jwtSecret   string
+}
 
-func RegisterUser(c *gin.Context) {
+func NewAuthHandler(as AuthService, secret string) *AuthHandler {
+	return &AuthHandler{
+		authService: as,
+		jwtSecret:   secret,
+	}
+}
+
+func (h *AuthHandler) RegisterUser(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
@@ -38,7 +52,7 @@ func RegisterUser(c *gin.Context) {
 		Password: hashed,
 	}
 
-	id, err := authService.Register(context.Background(), user)
+	id, err := h.authService.Register(context.Background(), user)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -55,7 +69,7 @@ func RegisterUser(c *gin.Context) {
 	})
 }
 
-func Login(c *gin.Context) {
+func (h *AuthHandler) Login(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -65,7 +79,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	u, err := authService.GetByEmail(context.Background(), req.Email)
+	u, err := h.authService.GetByEmail(context.Background(), req.Email)
 	if err != nil || u == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid credentials"})
 		return
@@ -76,7 +90,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateToken(u.Email, jwtSecret, 72*time.Hour)
+	token, err := utils.GenerateToken(u.Email, h.jwtSecret, 72*time.Hour)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
@@ -88,7 +102,7 @@ func Login(c *gin.Context) {
 	})
 }
 
-func Profile(c *gin.Context) {
+func (h *AuthHandler) Profile(c *gin.Context) {
 	emailVal, exists := c.Get("email")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -101,7 +115,7 @@ func Profile(c *gin.Context) {
 		return
 	}
 
-	u, err := authService.GetByEmail(context.Background(), email)
+	u, err := h.authService.GetByEmail(context.Background(), email)
 	if err != nil || u == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
 		return
@@ -114,8 +128,4 @@ func Profile(c *gin.Context) {
 			"email":    u.Email,
 		},
 	})
-}
-
-func Ping(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "server is running"})
 }

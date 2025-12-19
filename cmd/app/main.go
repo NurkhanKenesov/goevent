@@ -1,10 +1,6 @@
 package main
 
 import (
-	"log"
-
-	"github.com/gin-gonic/gin"
-
 	"goevent/internal/config"
 	"goevent/internal/db"
 	"goevent/internal/event"
@@ -12,6 +8,10 @@ import (
 	eventhandler "goevent/internal/handler/event"
 	"goevent/internal/invite"
 	"goevent/internal/repository"
+	"goevent/internal/service"
+	"log"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -26,18 +26,20 @@ func main() {
 
 	eventRepo := event.NewRepository(database)
 	userRepo := repository.NewUserRepo()
-
-	eventService := event.NewService(eventRepo, userRepo)
-	eventHandler := eventhandler.NewHandler(eventService)
-
 	inviteRepo := invite.NewRepository(database)
+
+	authSvc := service.NewAuthService(userRepo)
+	eventService := event.NewService(eventRepo, userRepo)
 	inviteService := invite.NewService(inviteRepo, eventRepo)
-	inviteHandler := invite.NewHandler(inviteService)
+
+	authHandler := auth.NewAuthHandler(authSvc, jwtSecret)
+	eventHandler := eventhandler.NewHandler(eventService)
+	inviteHandler := invite.NewHandler(inviteService, authSvc)
 
 	r := gin.Default()
 
-	r.POST("/register", auth.RegisterUser)
-	r.POST("/login", auth.Login)
+	r.POST("/register", authHandler.RegisterUser)
+	r.POST("/login", authHandler.Login)
 
 	authMiddleware := auth.AuthMiddleware(jwtSecret)
 

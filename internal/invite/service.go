@@ -6,14 +6,28 @@ import (
 	"goevent/internal/event"
 )
 
-type Service struct {
-	repo      *Repository
-	eventRepo *event.Repository
+// 1. Описываем интерфейсы того, что сервис хочет от репозиториев
+type InviteRepository interface {
+	CreateInvitation(ctx context.Context, inviteeID, eventID int64) (int64, error)
+	UpdateInvitationStatus(ctx context.Context, invitationID int64, status Status) error
+	GetMyEvents(ctx context.Context, userID int64) ([]*event.Event, error)
 }
 
-func NewService(repo *Repository, eventRepo *event.Repository) *Service {
+type EventRepository interface {
+	GetEventByID(ctx context.Context, id int) (*event.Event, error)
+}
+
+type Service struct {
+	repo      InviteRepository // Изменено на интерфейс
+	eventRepo EventRepository  // Изменено на интерфейс
+}
+
+// 2. Конструктор теперь принимает интерфейсы
+func NewService(repo InviteRepository, eventRepo EventRepository) *Service {
 	return &Service{repo: repo, eventRepo: eventRepo}
 }
+
+// ... методы сервиса остаются без изменений
 
 func (s *Service) InviteUser(ctx context.Context, inviterID, inviteeID, eventID int64) error {
 	// Check if inviter is the author of the event

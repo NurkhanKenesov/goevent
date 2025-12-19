@@ -1,4 +1,4 @@
-package eventhandler
+package event
 
 import (
 	"errors"
